@@ -633,6 +633,25 @@ def create_app():
     @app.route("/health", methods=["GET"])
     def health():
         return jsonify({"status": "ok"}), 200
+    
+    @app.route("/help", methods=["GET"])
+    def help_endpoint():
+        """
+        Simple help endpoint for developers/operators to discover available endpoints.
+        """
+        help_info = {
+            "description": "Trust Gateway API — endpoints to request package vetting and check status.",
+            "endpoints": {
+                "POST /request": "Request one or multiple pinned package==version specs. JSON: {package: 'pkg==ver' | 'pkg1==v1,pkg2==v2', packages: [...], wait: seconds}",
+                "POST /request/batch": "Upload requirements file (multipart 'requirements') to vet a batch of pinned packages.",
+                "POST /webhook/nexus": "Webhook endpoint for Nexus (component created).",
+                "GET  /job/<job_id>": "Query single job status.",
+                "GET  /batch/<batch_id>/status": "Query batch status.",
+            },
+            "notes": "Endpoints require pinned versions (pkg==version). Protect endpoints with API keys / auth in production."
+        }
+        from flask import jsonify
+        return jsonify(help_info), 200
 
     @app.route("/webhook/nexus", methods=["POST"])
     def nexus_webhook():

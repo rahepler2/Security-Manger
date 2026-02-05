@@ -1,14 +1,17 @@
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
-from .db import SessionLocal
-from .models import Job, JobStatus
-from .processing import process_package  # your existing logic refactored to return (verdict, report_path, trivy_json)
-from .storage import upload_file
-from sqlalchemy.exc import SQLAlchemyError
-import os
 from datetime import datetime
+from sqlalchemy.exc import SQLAlchemyError
+from .db import SessionLocal
+from .models import Job, JobStatus, Batch, BatchStatus
+from .storage import upload_file
+from .config import SCAN_WORKERS
+# Import processing.TrustGateway (after you move your existing code there)
+from .processing import TrustGateway
 
-POOL = ThreadPoolExecutor(max_workers=int(os.getenv("SCAN_WORKERS", "3")))
+POOL = ThreadPoolExecutor(max_workers=SCAN_WORKERS)
+GATEWAY = TrustGateway()
 
 def submit_job(package: str, version: str, batch_id: str | None = None) -> str:
     db = SessionLocal()
@@ -20,7 +23,7 @@ def submit_job(package: str, version: str, batch_id: str | None = None) -> str:
         job_id = job.id
     finally:
         db.close()
-    # schedule execution asynchronously
+    # schedule async execution
     POOL.submit(_run_job, job_id)
     return job_id
 
@@ -30,21 +33,20 @@ def _run_job(job_id: str):
         job = db.query(Job).get(job_id)
         if not job:
             return
-        # update to running
         job.status = JobStatus.running
         job.started_at = datetime.utcnow()
-        job.attempts = job.attempts + 1
+        job.attempts = (job.attempts or 0) + 1
         db.add(job); db.commit(); db.refresh(job)
 
-        # run the existing processing logic (returns verdict, report_path, details)
-        verdict, report_path, details = process_package(job.package, job.version)
+        # Call existing processing logic (returns verdict, report_path)
+        verdict, report_path = GATEWAY.process_package(job.package, job.version)
 
-        # upload report to minio
+        # Upload report
         key = f"reports/{job.id}/{os.path.basename(report_path)}"
-        report_url = upload_file(str(report_path), key)
+        report_url = upload_file(str(report_path), key) if report_path.exists() else None
 
-        # persist result
-        job.result = {"verdict": verdict.value, "details": details}
+        # Persist result summary
+        job.result = {"verdict": verdict.value}
         job.report_url = report_url
         job.status = JobStatus.done if verdict == verdict.PASS else JobStatus.failed
         job.finished_at = datetime.utcnow()
@@ -63,10 +65,8 @@ def _run_job(job_id: str):
 def recover_and_resubmit_running_jobs():
     db = SessionLocal()
     try:
-        # Jobs that were running/submitted at prior run should be requeued
         rows = db.query(Job).filter(Job.status.in_([JobStatus.submitted, JobStatus.running])).all()
         for j in rows:
-            # Avoid resubmitting jobs that have many attempts; you can implement backoff
             POOL.submit(_run_job, j.id)
     finally:
         db.close()

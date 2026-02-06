@@ -1,4 +1,4 @@
-FROM golang:1.22-bookworm AS builder
+FROM golang:1.23-bookworm AS builder
 
 # Build the OSSF package-analysis 'analyze' binary from source
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \

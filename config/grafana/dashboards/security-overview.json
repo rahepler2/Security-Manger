@@ -104,7 +104,9 @@
         "overrides": [
           { "matcher": { "id": "byName", "options": "verdict" }, "properties": [{ "id": "custom.displayMode", "value": "color-text" }, { "id": "mappings", "value": [{ "type": "value", "options": { "pass": { "color": "green", "text": "PASS" }, "warn": { "color": "orange", "text": "WARN" }, "fail": { "color": "red", "text": "FAIL" }, "error": { "color": "purple", "text": "ERROR" } } }] }] },
           { "matcher": { "id": "byName", "options": "critical" }, "properties": [{ "id": "custom.displayMode", "value": "color-background-solid" }, { "id": "color", "value": { "fixedColor": "dark-red", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "high" }, "properties": [{ "id": "custom.displayMode", "value": "color-background-solid" }, { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] }
+          { "matcher": { "id": "byName", "options": "high" }, "properties": [{ "id": "custom.displayMode", "value": "color-background-solid" }, { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "package" }, "properties": [{ "id": "links", "value": [{ "title": "View scan details", "url": "/d/trust-gateway-detail?var-job_id=${__data.fields.id}" }] }] },
+          { "matcher": { "id": "byName", "options": "id" }, "properties": [{ "id": "links", "value": [{ "title": "View scan details", "url": "/d/trust-gateway-detail?var-job_id=${__value.text}" }] }, { "id": "custom.width", "value": 80 }, { "id": "custom.displayMode", "value": "color-text" }, { "id": "color", "value": { "fixedColor": "super-light-blue", "mode": "fixed" } }] }
         ]
       },
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 13 },
@@ -159,7 +161,10 @@
       "datasource": { "type": "postgres", "uid": "${DS_GATEWAY_POSTGRESQL}" },
       "fieldConfig": {
         "defaults": { "color": { "mode": "palette-classic" }, "custom": { "align": "auto", "displayMode": "auto" }, "mappings": [] },
-        "overrides": []
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "package" }, "properties": [{ "id": "links", "value": [{ "title": "View scan details", "url": "/d/trust-gateway-detail?var-job_id=${__data.fields.id}" }] }] },
+          { "matcher": { "id": "byName", "options": "id" }, "properties": [{ "id": "custom.hidden", "value": true }] }
+        ]
       },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 31 },
       "id": 13,
@@ -167,7 +172,7 @@
       "title": "Top Vulnerable Packages",
       "type": "table",
       "targets": [{
-        "rawSql": "SELECT package, version, ecosystem, COALESCE((result->'trivy'->>'critical')::int, 0) AS critical, COALESCE((result->'trivy'->>'high')::int, 0) AS high, COALESCE((result->'trivy'->>'medium')::int, 0) AS medium, COALESCE((result->'trivy'->>'low')::int, 0) AS low, COALESCE((result->'trivy'->>'critical')::int, 0) + COALESCE((result->'trivy'->>'high')::int, 0) AS total_crit_high FROM jobs WHERE result->'trivy' IS NOT NULL ORDER BY total_crit_high DESC LIMIT 10;",
+        "rawSql": "SELECT id, package, version, ecosystem, COALESCE((result->'trivy'->>'critical')::int, 0) AS critical, COALESCE((result->'trivy'->>'high')::int, 0) AS high, COALESCE((result->'trivy'->>'medium')::int, 0) AS medium, COALESCE((result->'trivy'->>'low')::int, 0) AS low, COALESCE((result->'trivy'->>'critical')::int, 0) + COALESCE((result->'trivy'->>'high')::int, 0) AS total_crit_high FROM jobs WHERE result->'trivy' IS NOT NULL ORDER BY total_crit_high DESC LIMIT 10;",
         "refId": "A",
         "format": "table"
       }]

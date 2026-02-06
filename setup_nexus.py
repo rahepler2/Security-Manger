@@ -77,7 +77,8 @@ ECOSYSTEMS = {
         },
     },
     "maven": {
-        "format": "maven2",
+        "format": "maven2",                 # privilege format
+        "api_format": "maven",              # REST API path
         "upstream": "maven-upstream",
         "trusted": "maven-trusted",
         "quarantine": "maven-quarantine",
@@ -231,13 +232,18 @@ class NexusSetup:
         resp = self._api("GET", f"v1/repositories/{name}")
         return resp.status_code == 200
 
+    def _api_fmt(self, eco):
+        """API path format — differs from privilege format for Maven."""
+        return eco.get("api_format", eco["format"])
+
     def create_proxy_repo(self, eco):
         fmt = eco["format"]
+        api_fmt = self._api_fmt(eco)
         name = eco["upstream"]
         remote = eco["remote_url"]
         port = eco["ports"].get("upstream")
 
-        print(f"  Creating {fmt} proxy: {name}  ->  {remote}")
+        print(f"  Creating {api_fmt} proxy: {name}  ->  {remote}")
         if self.dry_run:
             return True
         if self._repo_exists(name):
@@ -269,15 +275,19 @@ class NexusSetup:
         if fmt == "nuget":
             payload["nugetProxy"] = {"queryCacheItemMaxAge": 3600, "nugetVersion": "V3"}
 
-        resp = self._api("POST", f"v1/repositories/{fmt}/proxy", json=payload)
+        if fmt == "maven2":
+            payload["maven"] = {"versionPolicy": "MIXED", "layoutPolicy": "PERMISSIVE"}
+
+        resp = self._api("POST", f"v1/repositories/{api_fmt}/proxy", json=payload)
         return self._check_create(resp, name)
 
     def create_hosted_repo(self, eco, tier):
         fmt = eco["format"]
+        api_fmt = self._api_fmt(eco)
         name = eco[tier]
         port = eco["ports"].get(tier)
 
-        print(f"  Creating {fmt} hosted: {name}")
+        print(f"  Creating {api_fmt} hosted: {name}")
         if self.dry_run:
             return True
         if self._repo_exists(name):
@@ -302,16 +312,17 @@ class NexusSetup:
         if fmt == "maven2":
             payload["maven"] = {"versionPolicy": "MIXED", "layoutPolicy": "PERMISSIVE"}
 
-        resp = self._api("POST", f"v1/repositories/{fmt}/hosted", json=payload)
+        resp = self._api("POST", f"v1/repositories/{api_fmt}/hosted", json=payload)
         return self._check_create(resp, name)
 
     def create_group_repo(self, eco):
         fmt = eco["format"]
+        api_fmt = self._api_fmt(eco)
         name = eco["group"]
         members = [eco["trusted"]]
         port = eco["ports"].get("group")
 
-        print(f"  Creating {fmt} group: {name}  members={members}")
+        print(f"  Creating {api_fmt} group: {name}  members={members}")
         if self.dry_run:
             return True
         if self._repo_exists(name):
@@ -333,7 +344,7 @@ class NexusSetup:
             if port:
                 payload["docker"]["httpPort"] = port
 
-        resp = self._api("POST", f"v1/repositories/{fmt}/group", json=payload)
+        resp = self._api("POST", f"v1/repositories/{api_fmt}/group", json=payload)
         return self._check_create(resp, name)
 
     def _check_create(self, resp, name):
@@ -434,11 +445,29 @@ class NexusSetup:
         if resp.status_code == 200:
             print(f"    OK    {user_id}")
             return True
-        if resp.status_code == 400 and ("already exists" in resp.text.lower()
-                                        or "duplicate" in resp.text.lower()):
-            print(f"    SKIP  {user_id} already exists")
-            return True
+        if "already exists" in resp.text.lower() or "duplicate" in resp.text.lower():
+            print(f"    SKIP  {user_id} already exists — updating roles...")
+            return self._update_user_roles(user_id, roles)
         print(f"    FAIL  {user_id} (HTTP {resp.status_code}): {resp.text[:200]}")
+        return False
+
+    def _update_user_roles(self, user_id, roles):
+        """Update an existing user's roles."""
+        resp = self._api("GET", f"v1/security/users?userId={user_id}")
+        if resp.status_code != 200:
+            print(f"    FAIL  cannot fetch user {user_id}")
+            return False
+        users = resp.json()
+        if not users:
+            print(f"    FAIL  user {user_id} not found")
+            return False
+        user = users[0]
+        user["roles"] = roles
+        resp = self._api("PUT", f"v1/security/users/{user_id}", json=user)
+        if resp.status_code in (200, 204):
+            print(f"    OK    updated roles for {user_id}")
+            return True
+        print(f"    FAIL  cannot update {user_id} (HTTP {resp.status_code})")
         return False
 
     # -------------------------------------------------------------------------

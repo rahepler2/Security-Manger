@@ -80,6 +80,10 @@ def parse_spec(spec: str) -> Tuple[Optional[str], Optional[str]]:
     if "==" in spec:
         p, v = spec.split("==", 1)
         return p.strip(), v.strip()
+    # Docker image:tag notation (last colon handles registry/image:tag)
+    if ":" in spec:
+        idx = spec.rfind(":")
+        return spec[:idx], spec[idx + 1:]
     return spec, None
 
 

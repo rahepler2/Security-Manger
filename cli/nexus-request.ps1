@@ -149,7 +149,16 @@ switch ($Command) {
 
         Write-Host "Scanning $spec ($eco)..."
 
-        $body = @{ package = $spec; ecosystem = $eco; wait = $Wait } | ConvertTo-Json
+        # Split spec into package + version for the API
+        if ($spec -match "==") {
+            $parts = $spec -split "==", 2
+            $body = @{ package = $parts[0]; version = $parts[1]; ecosystem = $eco; wait = $Wait } | ConvertTo-Json
+        } elseif ($eco -eq "docker" -and $spec -match ":") {
+            $idx = $spec.LastIndexOf(":")
+            $body = @{ package = $spec.Substring(0, $idx); version = $spec.Substring($idx + 1); ecosystem = $eco; wait = $Wait } | ConvertTo-Json
+        } else {
+            $body = @{ package = $spec; ecosystem = $eco; wait = $Wait } | ConvertTo-Json
+        }
 
         try {
             $resp = Invoke-RestMethod -Uri "$GatewayUrl/request" -Method Post `

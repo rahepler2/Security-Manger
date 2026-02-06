@@ -68,9 +68,24 @@ def _detect_ecosystem(filename: str) -> str | None:
 # API calls
 # ---------------------------------------------------------------------------
 
+def _split_spec(spec: str, ecosystem: str):
+    """Split a package spec into (name, version).  Handles == and docker colon notation."""
+    if "==" in spec:
+        p, v = spec.split("==", 1)
+        return p.strip(), v.strip()
+    if ecosystem == "docker" and ":" in spec:
+        idx = spec.rfind(":")
+        return spec[:idx], spec[idx + 1:]
+    return spec, None
+
+
 def api_submit(spec: str, ecosystem: str, wait: int) -> dict:
     url = f"{GATEWAY_URL}/request"
-    payload = {"package": spec, "ecosystem": ecosystem, "wait": wait}
+    name, version = _split_spec(spec, ecosystem)
+    if version:
+        payload = {"package": name, "version": version, "ecosystem": ecosystem, "wait": wait}
+    else:
+        payload = {"package": spec, "ecosystem": ecosystem, "wait": wait}
     resp = requests.post(url, headers=_headers(), json=payload, timeout=10 + wait)
     try:
         return {"code": resp.status_code, "body": resp.json()}

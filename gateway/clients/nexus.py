@@ -289,11 +289,26 @@ class NexusClient:
             log.error(f"Failed to read Docker tarball manifest: {e}")
             return False
 
-        # Get Nexus host (use hostname from base_url)
-        nexus_host = urlparse(self.base).hostname
-        target_ref = f"{nexus_host}:{port}/{original_ref}"
+        # Docker push goes through the host daemon (socket mount), so use
+        # the host-accessible address, not the compose-internal "nexus" hostname
+        registry_host = self.config.docker_registry_host
+        registry = f"{registry_host}:{port}"
+        target_ref = f"{registry}/{original_ref}"
 
-        log.info(f"Tagging {original_ref} → {target_ref}")
+        # Authenticate the host daemon to the Nexus registry
+        login_cmd = [
+            "docker", "login", registry,
+            "-u", self.config.username,
+            "-p", self.config.password,
+        ]
+        try:
+            result = subprocess.run(login_cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode != 0:
+                log.warning(f"docker login to {registry} failed: {result.stderr[:200]}")
+        except Exception as e:
+            log.warning(f"docker login exception: {type(e).__name__}: {e}")
+
+        log.info(f"Tagging {original_ref} -> {target_ref}")
         tag_cmd = ["docker", "tag", original_ref, target_ref]
         try:
             result = subprocess.run(tag_cmd, capture_output=True, text=True, timeout=30)

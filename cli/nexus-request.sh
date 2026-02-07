@@ -10,7 +10,7 @@
 #
 # Environment:
 #   TRUST_GATEWAY_URL  default: http://localhost:5000
-#   TRUST_GATEWAY_KEY  optional Bearer token
+#   TRUST_GATEWAY_KEY  optional API key (sent as X-API-Key header)
 
 set -euo pipefail
 

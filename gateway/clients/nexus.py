@@ -354,34 +354,75 @@ class NexusClient:
         return self._resolve_nexus_search_latest(package, repos["proxy"])
 
     def _resolve_pypi_latest(self, package: str, repo: str) -> Optional[str]:
-        """Query PyPI JSON API through Nexus proxy for latest version."""
-        url = f"{self.base}/repository/{repo}/pypi/{package}/json"
+        """Query PyPI JSON API for latest version.
+
+        Nexus proxy only serves the simple index, not the JSON API,
+        so we query PyPI directly then fall back to Nexus search.
+        """
+        # 1. Try PyPI directly (public, no auth needed)
         try:
+            resp = http_requests.get(
+                f"https://pypi.org/pypi/{package}/json", timeout=15
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                version = data.get("info", {}).get("version")
+                if version:
+                    log.info(f"Resolved {package} latest version: {version} (via PyPI)")
+                    return version
+        except Exception as e:
+            log.warning(f"PyPI direct version resolution failed: {e}")
+
+        # 2. Try Nexus proxy JSON API (works on some Nexus configs)
+        try:
+            url = f"{self.base}/repository/{repo}/pypi/{package}/json"
             resp = self.session.get(url, timeout=15)
             if resp.status_code == 200:
                 data = resp.json()
                 version = data.get("info", {}).get("version")
                 if version:
-                    log.info(f"Resolved {package} latest version: {version}")
+                    log.info(f"Resolved {package} latest version: {version} (via Nexus proxy)")
                     return version
         except Exception as e:
-            log.warning(f"PyPI version resolution failed: {e}")
-        # Fallback: Nexus search
+            log.warning(f"Nexus proxy PyPI JSON failed: {e}")
+
+        # 3. Fallback: Nexus search API
         return self._resolve_nexus_search_latest(package, repo)
 
     def _resolve_npm_latest(self, package: str, repo: str) -> Optional[str]:
-        """Query npm registry metadata through Nexus proxy for latest version."""
-        url = f"{self.base}/repository/{repo}/{package}"
+        """Query npm registry for latest version.
+
+        Tries the public npm registry first, then Nexus proxy, then search.
+        """
+        # 1. Try npm registry directly
         try:
+            resp = http_requests.get(
+                f"https://registry.npmjs.org/{package}",
+                headers={"Accept": "application/json"}, timeout=15,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                version = data.get("dist-tags", {}).get("latest")
+                if version:
+                    log.info(f"Resolved {package} latest version: {version} (via npmjs.org)")
+                    return version
+        except Exception as e:
+            log.warning(f"npm direct version resolution failed: {e}")
+
+        # 2. Try Nexus proxy
+        try:
+            url = f"{self.base}/repository/{repo}/{package}"
             resp = self.session.get(url, headers={"Accept": "application/json"}, timeout=15)
             if resp.status_code == 200:
                 data = resp.json()
                 version = data.get("dist-tags", {}).get("latest")
                 if version:
-                    log.info(f"Resolved {package} latest version: {version}")
+                    log.info(f"Resolved {package} latest version: {version} (via Nexus proxy)")
                     return version
         except Exception as e:
-            log.warning(f"npm version resolution failed: {e}")
+            log.warning(f"Nexus proxy npm resolution failed: {e}")
+
+        # 3. Fallback: Nexus search
         return self._resolve_nexus_search_latest(package, repo)
 
     def _resolve_nexus_search_latest(self, package: str, repo: str) -> Optional[str]:

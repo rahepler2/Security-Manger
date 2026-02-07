@@ -35,6 +35,7 @@ log = logging.getLogger("trust-gateway")
 # ---------------------------------------------------------------------------
 
 POOL = ThreadPoolExecutor(max_workers=SCAN_WORKERS)
+RESCAN_POOL = ThreadPoolExecutor(max_workers=1)
 _lock = threading.Lock()
 JOBS: Dict[str, Dict] = {}
 BATCHES: Dict[str, Dict] = {}
@@ -124,9 +125,10 @@ def _cleanup_old_jobs():
         log.info(f"Cleaned up {len(stale)} completed in-memory jobs")
 
 
-def submit_scan_job(package: str, version: str, ecosystem: str = "pypi") -> str:
+def submit_scan_job(package: str, version: str, ecosystem: str = "pypi",
+                    pool: Optional[ThreadPoolExecutor] = None) -> str:
     job_id = str(uuid.uuid4())
-    future = POOL.submit(GATEWAY.process_package, package, version, ecosystem)
+    future = (pool or POOL).submit(GATEWAY.process_package, package, version, ecosystem)
     with _lock:
         JOBS[job_id] = {
             "future": future,
@@ -205,7 +207,8 @@ def _run_rescan(ecosystem_filter: Optional[str] = None) -> dict:
     batch_id = str(uuid.uuid4())
     job_entries = []
     for pkg in all_packages:
-        jid = submit_scan_job(pkg["package"], pkg["version"], pkg["ecosystem"])
+        jid = submit_scan_job(pkg["package"], pkg["version"], pkg["ecosystem"],
+                              pool=RESCAN_POOL)
         job_entries.append({
             "package": pkg["package"], "version": pkg["version"],
             "ecosystem": pkg["ecosystem"], "job_id": jid,
@@ -276,13 +279,12 @@ def create_app():
             "endpoints": {
                 "POST /request": "Scan a package (version optional — resolves latest)",
                 "POST /request/batch": "Upload requirements file to vet a batch",
-                "POST /rescan": "Rescan all trusted packages for new vulnerabilities",
                 "POST /webhook/nexus": "Webhook for Nexus component-created events",
                 "GET  /job/<job_id>": "Query single job status",
                 "GET  /batch/<batch_id>/status": "Query batch status",
             },
             "ecosystems": ["pypi", "npm", "docker", "maven", "nuget"],
-            "notes": "Version is optional — the gateway will resolve the latest version automatically.",
+            "notes": "Version is optional — the gateway will resolve the latest version automatically. Trusted packages are rescanned automatically every 6 hours.",
         }), 200
 
     @app.route("/webhook/nexus", methods=["POST"])
@@ -450,14 +452,6 @@ def create_app():
             "overall": overall,
             "jobs": jobs_summary,
         }), 200
-
-    @app.route("/rescan", methods=["POST"])
-    def rescan_trusted():
-        """Rescan all packages in trusted repos against updated vulnerability databases."""
-        data = flask_request.get_json(force=True) if flask_request.is_json else {}
-        result = _run_rescan(data.get("ecosystem"))
-        code = 200 if result.get("status") == "no_packages" else 202
-        return jsonify(result), code
 
     return app
 

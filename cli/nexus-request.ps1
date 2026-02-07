@@ -170,7 +170,12 @@ switch ($Command) {
             )
 
             try {
+                $batchHeaders = @{ "Accept" = "application/json" }
+                if ($env:TRUST_GATEWAY_KEY) {
+                    $batchHeaders["X-API-Key"] = $env:TRUST_GATEWAY_KEY
+                }
                 $resp = Invoke-RestMethod -Uri "$GatewayUrl/request/batch" -Method Post `
+                    -Headers $batchHeaders `
                     -ContentType "multipart/form-data; boundary=$boundary" `
                     -Body ($bodyLines -join "`r`n") -TimeoutSec ($Wait + 30)
                 if ($resp.batch_id) {

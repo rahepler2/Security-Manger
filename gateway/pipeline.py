@@ -100,8 +100,8 @@ def _extract_scan_summary(all_results: dict, sbom_file: str | None) -> dict:
                     "type": comp.get("type", ""),
                     "license": ", ".join(comp_licenses) if comp_licenses else "",
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning(f"Failed to parse SBOM file for license data: {e}")
 
     return {
         "trivy": cve_counts,

@@ -76,8 +76,8 @@ def _persist_job(job_id: str, package: str, version: str, ecosystem: str):
         log.warning(f"Failed to persist job {job_id}: {e}")
         try:
             session.rollback()
-        except Exception:
-            pass
+        except Exception as rollback_err:
+            log.debug(f"Rollback also failed for job {job_id}: {rollback_err}")
     finally:
         SessionLocal.remove()
 
@@ -106,8 +106,8 @@ def _complete_job(job_id: str, future: Future):
         log.warning(f"Failed to update job {job_id}: {e}")
         try:
             session.rollback()
-        except Exception:
-            pass
+        except Exception as rollback_err:
+            log.debug(f"Rollback also failed for job {job_id}: {rollback_err}")
     finally:
         SessionLocal.remove()
 

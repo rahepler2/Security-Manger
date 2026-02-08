@@ -145,7 +145,7 @@ services:
       - POLICY_BLOCK_CRITICAL=${POLICY_BLOCK_CRITICAL:-true}
       - POLICY_BLOCK_HIGH=${POLICY_BLOCK_HIGH:-true}
       - POLICY_BLOCK_NET=${POLICY_BLOCK_NET:-true}
-      - POLICY_BLOCK_FS=${POLICY_BLOCK_FS:-false}
+      - POLICY_BLOCK_FS=${POLICY_BLOCK_FS:-true}
       - POLICY_BLOCK_MALWARE=${POLICY_BLOCK_MALWARE:-true}
       # Database
       - DATABASE_URL=postgresql://${PG_USER}:${PG_PASS}@postgres:5432/${PG_DB:-gatewaydb}
